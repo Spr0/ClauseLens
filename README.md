@@ -8,7 +8,7 @@ ClauseLens is a single-page React app that uses the Anthropic Claude API to extr
 
 ## Live Demo
 
-> Deploy via [Vercel](https://vercel.com) or [Netlify](https://netlify.com) — see Setup below.
+>🔗 **[clauselens.netlify.app](https://clauselens.netlify.app)**
 
 ---
 
