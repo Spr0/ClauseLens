@@ -1,71 +1,71 @@
 import { useState, useCallback } from "react";
 import * as mammoth from "mammoth";
+import { extractPdfText, ScannedPdfError } from "./lib/pdf";
+import { isValidResult } from "./lib/extraction.js";
+import { CASCADE_RIDGE_TEXT, CASCADE_RIDGE_RESULT } from "./lib/sampleContract.js";
 
 const CLAUSES = ["Term", "Payment", "Termination", "Liability Cap", "Indemnity"];
 
-const SYSTEM_PROMPT = `You are a legal contract analyst. Extract specific clauses from contract text.
-Return ONLY a valid JSON object with exactly these keys: "Term", "Payment", "Termination", "Liability Cap", "Indemnity".
-For each key, provide the relevant extracted text from the contract. If a clause is not found, use the string "Not Found."
-Be concise — extract the most relevant sentence(s) for each clause. Do not include preamble or explanation, only the JSON object.`;
+// Study Groups palette (shared with the rest of the demo suite).
+const T = {
+  royal: "#122a9b",
+  brick: "#c73c2f",
+  ink: "#1a1c20",
+  white: "#ffffff",
+  panel: "#f3f5fb",
+  hair: "#dbe0ea",
+  grey1: "#3a3d44",
+  grey2: "#4a4d55",
+  grey3: "#6b6e76",
+  display: '"Barlow Semi Condensed", system-ui, sans-serif',
+  body: '"Spectral", Georgia, serif',
+  mono: '"Space Mono", ui-monospace, "SF Mono", monospace',
+};
 
-const EXPLAIN_PROMPT = `You are a legal contract analyst. A user extracted a clause from a contract and wants to understand how you identified it.
-Given the clause name, the extracted text, and the original contract, explain in 2-3 plain-language sentences:
-1. Where in the contract you found this clause
-2. Why this text was chosen as the most relevant excerpt
-3. Any caveats or nuances the user should be aware of
-Be concise and plain-language. Do not use legal jargon without explaining it.`;
-
-const ANTHROPIC_API_KEY = import.meta.env.VITE_ANTHROPIC_API_KEY || "";
-
-async function callAPI(systemPrompt, userMessage) {
-  if (!ANTHROPIC_API_KEY) {
-    throw new Error("API key not configured. Set VITE_ANTHROPIC_API_KEY in your environment.");
-  }
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+// The browser never talks to api.anthropic.com directly anymore. It calls our
+// own serverless function, which holds the key in server env only.
+async function postAnalyze(body) {
+  const res = await fetch("/api/analyze", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-      "anthropic-dangerous-direct-browser-access": "true",
-    },
-    body: JSON.stringify({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 2000,
-      system: systemPrompt,
-      messages: [{ role: "user", content: userMessage }]
-    })
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
   });
-
   let data;
-  let rawText = "";
   try {
-    rawText = await response.text();
-    data = JSON.parse(rawText);
+    data = await res.json();
   } catch {
-    throw new Error(`Status ${response.status} — raw: ${rawText.slice(0, 300)}`);
+    throw new Error("The analysis service returned an unexpected response.");
   }
-
-  if (!response.ok || data.error) {
-    const msg = data.error?.message || JSON.stringify(data).slice(0, 300);
-    throw new Error(`API ${response.status}: ${msg}`);
+  if (!res.ok || data.error) {
+    throw new Error(data.error || "Analysis failed. Please try again.");
   }
+  return data;
+}
 
-  const text = data.content?.find(b => b.type === "text")?.text || "";
-  if (!text) throw new Error("Empty response from API");
-  return text;
+async function extractClauses(contractText) {
+  const data = await postAnalyze({ mode: "extract", contractText });
+  return data.result;
+}
+
+async function explainClause(clause, extracted, contractExcerpt) {
+  const data = await postAnalyze({ mode: "explain", clause, extracted, contractExcerpt });
+  return data.explanation;
 }
 
 function Spinner({ size = 14 }) {
   return (
-    <>
-      <span style={{
-        display: "inline-block", width: size, height: size,
-        border: "2px solid #555", borderTopColor: "#c9a84c",
-        borderRadius: "50%", animation: "spin 0.7s linear infinite", flexShrink: 0
-      }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </>
+    <span
+      style={{
+        display: "inline-block",
+        width: size,
+        height: size,
+        border: `2px solid ${T.hair}`,
+        borderTopColor: T.royal,
+        borderRadius: "50%",
+        animation: "spin 0.7s linear infinite",
+        flexShrink: 0,
+      }}
+    />
   );
 }
 
@@ -91,9 +91,8 @@ function ClauseRow({ clause, value, contractText, rowIndex }) {
     try {
       const contractSnippet = typeof contractText === "string"
         ? contractText.slice(0, 6000)
-        : "[PDF — text not available for explanation]";
-      const result = await callAPI(EXPLAIN_PROMPT,
-        `Clause: ${clause}\nExtracted text: ${savedValue}\n\nContract excerpt:\n${contractSnippet}`);
+        : "[PDF, text not available for explanation]";
+      const result = await explainClause(clause, savedValue, contractSnippet);
       setExplanation(result);
     } catch (err) {
       setExplainError(`Explanation failed: ${err.message}`);
@@ -103,19 +102,21 @@ function ClauseRow({ clause, value, contractText, rowIndex }) {
   };
 
   const btnBase = {
-    border: "1px solid #2e2e42", borderRadius: "3px", padding: "4px 10px",
-    fontSize: "11px", fontFamily: "system-ui, sans-serif", cursor: "pointer", letterSpacing: "0.5px",
+    border: `1px solid ${T.hair}`, borderRadius: "5px", padding: "5px 12px",
+    fontSize: "11px", fontFamily: T.display, fontWeight: "700", cursor: "pointer",
+    letterSpacing: "0.05em", textTransform: "uppercase",
   };
 
   return (
     <>
       <tr style={{
-        borderBottom: showExplanation ? "none" : "1px solid #1e1e2e",
-        background: rowIndex % 2 === 0 ? "rgba(255,255,255,0.01)" : "transparent",
+        borderBottom: showExplanation ? "none" : `1px solid ${T.hair}`,
+        background: rowIndex % 2 === 0 ? T.panel : T.white,
       }}>
         <td style={{
-          padding: "16px", color: "#e8d898", fontWeight: "600", verticalAlign: "top",
-          whiteSpace: "nowrap", fontFamily: "system-ui, sans-serif", fontSize: "13px", width: "140px"
+          padding: "16px", color: T.royal, fontWeight: "700", verticalAlign: "top",
+          whiteSpace: "nowrap", fontFamily: T.display, fontSize: "14px", letterSpacing: "0.02em",
+          textTransform: "uppercase", width: "150px",
         }}>{clause}</td>
 
         <td style={{ padding: "16px", verticalAlign: "top" }}>
@@ -126,28 +127,27 @@ function ClauseRow({ clause, value, contractText, rowIndex }) {
                 onChange={e => setEditValue(e.target.value)}
                 autoFocus
                 style={{
-                  width: "100%", minHeight: "80px", background: "#13141f",
-                  border: "1px solid #c9a84c", borderRadius: "4px", color: "#d8d0c0",
-                  fontFamily: "system-ui, sans-serif", fontSize: "13px", lineHeight: "1.6",
+                  width: "100%", minHeight: "80px", background: T.white,
+                  border: `1px solid ${T.royal}`, borderRadius: "6px", color: T.ink,
+                  fontFamily: T.body, fontSize: "15px", lineHeight: "1.6",
                   padding: "10px", resize: "vertical", outline: "none",
-                  boxSizing: "border-box", marginBottom: "8px"
+                  boxSizing: "border-box", marginBottom: "8px",
                 }}
               />
               <div style={{ display: "flex", gap: "8px" }}>
                 <button onClick={handleSave} style={{
-                  ...btnBase, background: "#c9a84c", color: "#0f1117", border: "none", fontWeight: "600"
+                  ...btnBase, background: T.royal, color: T.white, border: "none",
                 }}>Save</button>
                 <button onClick={handleCancel} style={{
-                  ...btnBase, background: "transparent", color: "#8880a0"
+                  ...btnBase, background: T.white, color: T.grey2,
                 }}>Cancel</button>
               </div>
             </div>
           ) : (
             <span style={{
-              color: notFound ? "#55505a" : "#c8c0b0", lineHeight: "1.7",
+              color: notFound ? T.grey3 : T.ink, lineHeight: "1.7",
               fontStyle: notFound ? "italic" : "normal",
-              fontFamily: notFound ? "system-ui, sans-serif" : "Georgia, serif",
-              fontSize: "14px", display: "block", marginBottom: "4px"
+              fontFamily: T.body, fontSize: "15px", display: "block", marginBottom: "4px",
             }}>{savedValue}</span>
           )}
         </td>
@@ -156,16 +156,16 @@ function ClauseRow({ clause, value, contractText, rowIndex }) {
           {!editing && (
             <div style={{ display: "flex", flexDirection: "column", gap: "6px", alignItems: "flex-end" }}>
               <button onClick={() => setEditing(true)} style={{
-                ...btnBase, background: "transparent", color: "#8890c0"
-              }}>✏️ Edit</button>
+                ...btnBase, background: T.white, color: T.royal,
+              }}>Edit</button>
               <button onClick={handleExplain} style={{
                 ...btnBase,
-                background: showExplanation ? "rgba(201,168,76,0.15)" : "transparent",
-                color: "#c9a84c",
-                borderColor: showExplanation ? "#c9a84c" : "#2e2e42",
-                display: "flex", alignItems: "center", gap: "5px"
+                background: showExplanation ? "rgba(18,42,155,0.08)" : T.white,
+                color: T.royal,
+                borderColor: showExplanation ? T.royal : T.hair,
+                display: "flex", alignItems: "center", gap: "5px",
               }}>
-                {explainLoading ? <><Spinner size={10} />Asking…</> : "🔍 Explain"}
+                {explainLoading ? <><Spinner size={10} />Asking</> : "Explain"}
               </button>
             </div>
           )}
@@ -173,24 +173,25 @@ function ClauseRow({ clause, value, contractText, rowIndex }) {
       </tr>
 
       {showExplanation && (
-        <tr style={{ borderBottom: "1px solid #1e1e2e" }}>
+        <tr style={{ borderBottom: `1px solid ${T.hair}` }}>
           <td colSpan={3} style={{ padding: "0 16px 16px 16px" }}>
             <div style={{
-              background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.2)",
-              borderRadius: "4px", padding: "14px 16px", fontFamily: "system-ui, sans-serif",
-              fontSize: "13px", lineHeight: "1.7", color: "#b8b0a0"
+              background: T.panel, border: `1px solid ${T.hair}`, borderLeft: `3px solid ${T.royal}`,
+              borderRadius: "6px", padding: "14px 16px", fontFamily: T.body,
+              fontSize: "15px", lineHeight: "1.7", color: T.ink,
             }}>
               {explainLoading ? (
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#6b6880" }}>
-                  <Spinner size={12} /> Generating explanation…
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", color: T.grey3 }}>
+                  <Spinner size={12} /> Generating explanation
                 </div>
               ) : explainError ? (
-                <span style={{ color: "#e08080", wordBreak: "break-word" }}>{explainError}</span>
+                <span style={{ color: "#8f2b22", wordBreak: "break-word" }}>{explainError}</span>
               ) : (
                 <>
                   <div style={{
-                    color: "#c9a84c", fontSize: "11px", letterSpacing: "1.5px",
-                    textTransform: "uppercase", marginBottom: "8px", fontWeight: "600"
+                    color: T.brick, fontSize: "11px", letterSpacing: "0.1em",
+                    textTransform: "uppercase", marginBottom: "8px", fontWeight: "700",
+                    fontFamily: T.display,
                   }}>AI Explanation</div>
                   {explanation}
                 </>
@@ -217,36 +218,37 @@ function ROIPanel() {
   const annualSavedDollars = annualSavedHours * rate;
 
   const statStyle = {
-    background: "rgba(201,168,76,0.06)", border: "1px solid rgba(201,168,76,0.15)",
-    borderRadius: "6px", padding: "16px 20px", flex: "1", minWidth: "120px"
+    background: T.panel, border: `1px solid ${T.hair}`,
+    borderRadius: "8px", padding: "16px 20px", flex: "1", minWidth: "120px",
   };
   const labelStyle = {
-    fontFamily: "system-ui, sans-serif", fontSize: "10px", letterSpacing: "1.5px",
-    textTransform: "uppercase", color: "#6b6040", marginBottom: "6px"
+    fontFamily: T.display, fontSize: "11px", letterSpacing: "0.08em",
+    textTransform: "uppercase", color: T.brick, fontWeight: "700", marginBottom: "6px",
   };
   const valueStyle = {
-    fontFamily: "system-ui, sans-serif", fontSize: "22px", fontWeight: "700", color: "#c9a84c"
+    fontFamily: T.display, fontSize: "24px", fontWeight: "800", color: T.royal,
   };
   const subStyle = {
-    fontFamily: "system-ui, sans-serif", fontSize: "11px", color: "#4a4858", marginTop: "2px"
+    fontFamily: T.body, fontSize: "12px", color: T.grey3, marginTop: "2px",
   };
   const inputStyle = {
-    background: "#13141f", border: "1px solid #2e2e42", borderRadius: "3px",
-    color: "#d8d0c0", fontFamily: "system-ui, sans-serif", fontSize: "13px",
-    padding: "5px 10px", width: "80px", outline: "none", textAlign: "right"
+    background: T.white, border: `1px solid ${T.hair}`, borderRadius: "6px",
+    color: T.ink, fontFamily: T.body, fontSize: "14px",
+    padding: "5px 10px", width: "80px", outline: "none", textAlign: "right",
   };
 
   return (
     <div>
       <div style={{
-        fontFamily: "system-ui, sans-serif", fontSize: "10px", letterSpacing: "1.5px",
-        textTransform: "uppercase", color: "#6b6040", fontWeight: "600", marginBottom: "16px"
+        fontFamily: T.display, fontSize: "13px", letterSpacing: "0.05em",
+        textTransform: "uppercase", color: T.ink, fontWeight: "700", marginBottom: "16px",
+        paddingBottom: "4px", borderBottom: `2px solid ${T.hair}`,
       }}>Time Saved · ROI Estimate</div>
 
       {/* Assumptions */}
       <div style={{
         display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "20px",
-        fontFamily: "system-ui, sans-serif", fontSize: "13px", color: "#7a7088", alignItems: "center"
+        fontFamily: T.body, fontSize: "14px", color: T.grey2, alignItems: "center",
       }}>
         <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
           <span>Hourly rate ($)</span>
@@ -264,8 +266,8 @@ function ROIPanel() {
             style={inputStyle}
           />
         </div>
-        <div style={{ color: "#3e3a4a", fontSize: "12px" }}>
-          Assumes 25 min manual · ~1.5 min with AI
+        <div style={{ color: T.grey3, fontSize: "13px", fontStyle: "italic" }}>
+          Assumes 25 min manual, about 1.5 min with AI
         </div>
       </div>
 
@@ -279,23 +281,23 @@ function ROIPanel() {
         <div style={statStyle}>
           <div style={labelStyle}>Monthly Hours</div>
           <div style={valueStyle}>{totalSavedHours.toFixed(1)} hrs</div>
-          <div style={subStyle}>{contracts} contracts · {totalSavedHours.toFixed(1)} hrs freed</div>
+          <div style={subStyle}>{contracts} contracts, {totalSavedHours.toFixed(1)} hrs freed</div>
         </div>
         <div style={statStyle}>
           <div style={labelStyle}>Monthly Value</div>
           <div style={valueStyle}>${totalSavedDollars.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
           <div style={subStyle}>at ${rate}/hr loaded cost</div>
         </div>
-        <div style={{ ...statStyle, border: "1px solid rgba(201,168,76,0.35)", background: "rgba(201,168,76,0.1)" }}>
+        <div style={{ ...statStyle, border: `1px solid ${T.royal}`, background: "rgba(18,42,155,0.06)" }}>
           <div style={labelStyle}>Annual Value</div>
-          <div style={{ ...valueStyle, fontSize: "26px" }}>${annualSavedDollars.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
-          <div style={subStyle}>{annualSavedHours.toFixed(0)} hrs · {annualContracts} contracts/yr</div>
+          <div style={{ ...valueStyle, fontSize: "28px" }}>${annualSavedDollars.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+          <div style={subStyle}>{annualSavedHours.toFixed(0)} hrs, {annualContracts} contracts/yr</div>
         </div>
       </div>
 
       <div style={{
-        marginTop: "12px", fontFamily: "system-ui, sans-serif", fontSize: "11px",
-        color: "#3a3848", fontStyle: "italic"
+        marginTop: "12px", fontFamily: T.body, fontSize: "12px",
+        color: T.grey3, fontStyle: "italic",
       }}>
         Estimates only. Actual time savings vary by contract complexity, reviewer experience, and review scope.
         Does not account for AI error correction time or legal review requirements.
@@ -311,17 +313,27 @@ export default function ClauseLens() {
   const [error, setError] = useState(null);
   const [fileName, setFileName] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [isSample, setIsSample] = useState(false);
+  const [usedFallback, setUsedFallback] = useState(false);
+  const [simulateOffline, setSimulateOffline] = useState(false);
 
   const processFile = useCallback(async (file) => {
     setFileName(file.name);
     setError(null);
-    if (file.type === "application/pdf") {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const base64 = e.target.result.split(",")[1];
-        setContractText({ type: "pdf", base64, mediaType: "application/pdf" });
-      };
-      reader.readAsDataURL(file);
+    setContractText("");
+    setIsSample(false);
+    if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const text = await extractPdfText(arrayBuffer);
+        setContractText(text);
+      } catch (e) {
+        setFileName(null);
+        const msg = e instanceof ScannedPdfError
+          ? e.message
+          : "Could not read this PDF. Try pasting the contract text.";
+        setError(msg);
+      }
     } else if (
       file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
       file.name.endsWith(".docx")
@@ -353,46 +365,107 @@ export default function ClauseLens() {
     if (file) processFile(file);
   }, [processFile]);
 
+  const loadSample = () => {
+    setContractText(CASCADE_RIDGE_TEXT);
+    setIsSample(true);
+    setFileName(null);
+    setError(null);
+    setResults(null);
+    setUsedFallback(false);
+  };
+
   const analyze = async () => {
-    if (!contractText) return;
-    setLoading(true); setError(null); setResults(null);
+    const text = typeof contractText === "string" ? contractText : "";
+    if (text.trim().length === 0) {
+      setError("No contract text to analyze. Paste text or upload a readable file.");
+      return;
+    }
+    // We only have a vetted cached result for the sample contract, so the
+    // scripted fallback is offered only when the loaded text IS the sample.
+    // Never fabricate a result for an arbitrary contract.
+    const sample = isSample && text === CASCADE_RIDGE_TEXT;
+
+    setLoading(true); setError(null); setResults(null); setUsedFallback(false);
+
+    // Demo switch: deliberately show the saved-example path on stage.
+    if (sample && simulateOffline) {
+      setResults(CASCADE_RIDGE_RESULT);
+      setUsedFallback(true);
+      setLoading(false);
+      return;
+    }
+
     try {
-      const userMessage = typeof contractText === "object" && contractText.type === "pdf"
-        ? "Extract the 5 key clauses from this contract as instructed."
-        : `Extract the 5 key clauses from this contract:\n\n${contractText}`;
-      const text = await callAPI(SYSTEM_PROMPT, userMessage);
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) throw new Error(`No JSON in response: ${text.slice(0, 200)}`);
-      setResults(JSON.parse(jsonMatch[0]));
+      const result = await extractClauses(text);
+      // Gate the table: only render on a valid, structured 5-clause result.
+      // Anything else stays an error, never a false "Not Found" table.
+      if (!isValidResult(result)) {
+        throw new Error("Could not read a clear result from this contract. Try again, or paste the text.");
+      }
+      setResults(result);
     } catch (err) {
-      setError(`Analysis failed: ${err.message}`);
+      if (sample) {
+        // The demo never dies: fall back to the vetted cached result.
+        setResults(CASCADE_RIDGE_RESULT);
+        setUsedFallback(true);
+      } else {
+        setError(err.message || "Analysis failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const reset = () => { setContractText(""); setResults(null); setError(null); setFileName(null); };
+  const reset = () => {
+    setContractText(""); setResults(null); setError(null);
+    setFileName(null); setIsSample(false); setUsedFallback(false);
+  };
   const hasText = typeof contractText === "string" ? contractText.trim().length > 0 : !!contractText;
 
+  const sectionLabel = {
+    fontFamily: T.display, fontSize: "11px", letterSpacing: "0.1em",
+    textTransform: "uppercase", color: T.brick, fontWeight: "700",
+  };
+
   return (
-    <div style={{ minHeight: "100vh", background: "#0f1117", fontFamily: "'Georgia', 'Times New Roman', serif", color: "#e8e0d0" }}>
-      <div style={{
-        borderBottom: "1px solid #2a2a3a", padding: "28px 40px 24px",
-        background: "linear-gradient(to bottom, #13141f, #0f1117)"
-      }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: "10px" }}>
-          <span style={{ fontSize: "26px", fontWeight: "700", letterSpacing: "-0.5px", color: "#f0e8d0" }}>ClauseLens</span>
-          <span style={{
-            fontSize: "11px", letterSpacing: "3px", color: "#c9a84c",
-            textTransform: "uppercase", fontFamily: "system-ui, sans-serif", fontWeight: "500"
-          }}>Contract Intelligence</span>
+    <div style={{ minHeight: "100vh", background: T.white, fontFamily: T.body, color: T.ink }}>
+      {/* Masthead - shared Study Groups lockup */}
+      <header style={{ background: T.royal, color: T.white }}>
+        <div style={{
+          maxWidth: "1000px", margin: "0 auto", padding: "14px 24px",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: "16px",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span style={{
+              fontFamily: T.display, fontWeight: "800", fontSize: "20px", letterSpacing: "0.04em",
+              background: T.white, color: T.royal, padding: "2px 8px", borderRadius: "3px",
+            }}>SG</span>
+            <span style={{
+              fontFamily: T.display, fontWeight: "700", fontSize: "20px",
+              letterSpacing: "0.06em", textTransform: "uppercase",
+            }}>Study Groups</span>
+          </div>
+          <div style={{
+            fontFamily: T.display, fontWeight: "600", fontSize: "14px",
+            letterSpacing: "0.05em", textTransform: "uppercase", opacity: 0.92, textAlign: "right",
+          }}>ClauseLens · Contract Intelligence</div>
         </div>
-        <div style={{ fontSize: "13px", color: "#6b6880", marginTop: "4px", fontFamily: "system-ui, sans-serif" }}>
-          Extract key clauses instantly — Term · Payment · Termination · Liability Cap · Indemnity
+      </header>
+
+      {/* Product band */}
+      <div style={{ borderBottom: `1px solid ${T.hair}`, background: T.panel }}>
+        <div style={{ maxWidth: "1000px", margin: "0 auto", padding: "28px 24px 24px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "12px", flexWrap: "wrap" }}>
+            <span style={{ fontFamily: T.display, fontSize: "34px", fontWeight: "800", letterSpacing: "0.01em", color: T.ink }}>ClauseLens</span>
+            <span style={{ ...sectionLabel, fontSize: "12px", letterSpacing: "0.18em" }}>Contract Clause Extractor</span>
+          </div>
+          <div style={{ fontSize: "16px", color: T.grey2, marginTop: "6px", fontFamily: T.body }}>
+            Extract key clauses in seconds · Term · Payment · Termination · Liability Cap · Indemnity
+          </div>
         </div>
       </div>
 
-      <div style={{ padding: "36px 40px", maxWidth: "900px" }}>
+      <div style={{ padding: "32px 24px", maxWidth: "1000px", margin: "0 auto" }}>
         {!results ? (
           <>
             <div
@@ -401,20 +474,20 @@ export default function ClauseLens() {
               onDrop={handleDrop}
               onClick={() => document.getElementById("file-input").click()}
               style={{
-                border: `1.5px dashed ${dragOver ? "#c9a84c" : "#2e2e42"}`,
-                borderRadius: "6px", padding: "24px", textAlign: "center", marginBottom: "20px",
+                border: `1.5px dashed ${dragOver ? T.royal : T.hair}`,
+                borderRadius: "8px", padding: "24px", textAlign: "center", marginBottom: "20px",
                 cursor: "pointer", transition: "border-color 0.2s, background 0.2s",
-                background: dragOver ? "rgba(201,168,76,0.05)" : "rgba(255,255,255,0.02)",
+                background: dragOver ? "rgba(18,42,155,0.04)" : T.panel,
               }}
             >
               <input id="file-input" type="file" accept=".pdf,.docx" style={{ display: "none" }} onChange={handleFileInput} />
               <div style={{ fontSize: "28px", marginBottom: "8px" }}>📄</div>
               {fileName ? (
-                <div style={{ color: "#c9a84c", fontFamily: "system-ui, sans-serif", fontSize: "14px" }}>✓ {fileName}</div>
+                <div style={{ color: T.royal, fontFamily: T.display, fontSize: "15px", fontWeight: "700" }}>✓ {fileName}</div>
               ) : (
                 <>
-                  <div style={{ color: "#a09898", fontFamily: "system-ui, sans-serif", fontSize: "14px" }}>Drop a PDF or DOCX here, or click to browse</div>
-                  <div style={{ color: "#555", fontFamily: "system-ui, sans-serif", fontSize: "12px", marginTop: "4px" }}>or paste contract text below</div>
+                  <div style={{ color: T.ink, fontFamily: T.display, fontSize: "15px", fontWeight: "600" }}>Drop a PDF or DOCX here, or click to browse</div>
+                  <div style={{ color: T.grey3, fontFamily: T.body, fontSize: "13px", marginTop: "4px" }}>or paste contract text below</div>
                 </>
               )}
             </div>
@@ -422,51 +495,88 @@ export default function ClauseLens() {
             {(!fileName || typeof contractText === "string") && (
               <textarea
                 value={typeof contractText === "string" ? contractText : ""}
-                onChange={(e) => { setContractText(e.target.value); setFileName(null); }}
-                placeholder="Paste contract text here…"
+                onChange={(e) => { setContractText(e.target.value); setFileName(null); setIsSample(false); }}
+                placeholder="Paste contract text here, or load the sample below"
                 style={{
-                  width: "100%", minHeight: "220px", background: "#13141f",
-                  border: "1px solid #2a2a3a", borderRadius: "6px", color: "#d8d0c0",
-                  fontFamily: "system-ui, sans-serif", fontSize: "13px", lineHeight: "1.7",
+                  width: "100%", minHeight: "220px", background: T.white,
+                  border: `1px solid ${T.hair}`, borderRadius: "8px", color: T.ink,
+                  fontFamily: T.body, fontSize: "15px", lineHeight: "1.7",
                   padding: "16px", resize: "vertical", outline: "none",
-                  boxSizing: "border-box", marginBottom: "20px"
+                  boxSizing: "border-box", marginBottom: "20px",
                 }}
-                onFocus={(e) => e.target.style.borderColor = "#c9a84c"}
-                onBlur={(e) => e.target.style.borderColor = "#2a2a3a"}
+                onFocus={(e) => e.target.style.borderColor = T.royal}
+                onBlur={(e) => e.target.style.borderColor = T.hair}
               />
             )}
 
             {error && (
               <div style={{
-                background: "rgba(180,60,60,0.15)", border: "1px solid #6b2a2a",
-                borderRadius: "4px", padding: "12px 16px", color: "#e08080",
-                fontFamily: "system-ui, sans-serif", fontSize: "13px",
-                marginBottom: "20px", wordBreak: "break-word"
+                background: "rgba(199,60,47,0.1)", border: `1px solid ${T.brick}`,
+                borderRadius: "6px", padding: "12px 16px", color: "#8f2b22",
+                fontFamily: T.body, fontSize: "15px",
+                marginBottom: "20px", wordBreak: "break-word",
               }}>{error}</div>
             )}
 
-            <button onClick={analyze} disabled={!hasText || loading} style={{
-              background: hasText && !loading ? "#c9a84c" : "#2a2a3a",
-              color: hasText && !loading ? "#0f1117" : "#555",
-              border: "none", borderRadius: "4px", padding: "13px 32px",
-              fontSize: "14px", fontFamily: "system-ui, sans-serif", fontWeight: "600",
-              cursor: hasText && !loading ? "pointer" : "not-allowed",
-              letterSpacing: "0.5px", display: "flex", alignItems: "center", gap: "10px"
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px" }}>
+              <button onClick={analyze} disabled={!hasText || loading} style={{
+                background: hasText && !loading ? T.royal : T.hair,
+                color: hasText && !loading ? T.white : T.grey3,
+                border: "none", borderRadius: "6px", padding: "12px 24px",
+                fontSize: "14px", fontFamily: T.display, fontWeight: "700",
+                cursor: hasText && !loading ? "pointer" : "not-allowed",
+                letterSpacing: "0.05em", textTransform: "uppercase",
+                display: "flex", alignItems: "center", gap: "10px",
+              }}>
+                {loading ? <><Spinner /> Analyzing contract</> : "Extract Clauses"}
+              </button>
+
+              <button onClick={loadSample} disabled={loading} style={{
+                background: T.white, color: T.royal, border: `1px solid ${T.royal}`,
+                borderRadius: "6px", padding: "12px 20px",
+                fontSize: "14px", fontFamily: T.display, fontWeight: "700",
+                cursor: loading ? "not-allowed" : "pointer",
+                letterSpacing: "0.05em", textTransform: "uppercase",
+              }}>Load Sample</button>
+
+              <label style={{
+                display: "inline-flex", alignItems: "center", gap: "6px",
+                fontFamily: T.body, fontSize: "13px", color: T.grey3, cursor: "pointer",
+              }} title="Force the saved-example path so you can show the fallback on stage">
+                <input
+                  type="checkbox"
+                  checked={simulateOffline}
+                  onChange={(e) => setSimulateOffline(e.target.checked)}
+                  style={{ accentColor: T.royal }}
+                />
+                Simulate offline (show fallback)
+              </label>
+            </div>
+
+            {isSample && (
+              <div style={{
+                marginTop: "12px", fontFamily: T.body, fontSize: "13px", color: T.royal,
+              }}>
+                Cascade Ridge sample loaded. Click Extract Clauses to analyze. Liability Cap is intentionally absent.
+              </div>
+            )}
+
+            {/* Privacy line */}
+            <div style={{
+              marginTop: "20px", fontFamily: T.body, fontSize: "13px", color: T.grey3,
             }}>
-              {loading ? <><Spinner /> Analyzing contract…</> : "Extract Clauses"}
-            </button>
+              Contract text is sent to the AI provider for analysis and is not stored by ClauseLens.
+              This demo uses a fictional contract. Do not paste a real, sensitive contract into a public tool.
+            </div>
 
             {/* Disclaimer */}
             <div style={{
-              marginTop: "36px", borderTop: "1px solid #1e1e2e", paddingTop: "20px",
-              fontFamily: "system-ui, sans-serif", fontSize: "12px", lineHeight: "1.8", color: "#4a4858"
+              marginTop: "28px", borderTop: `1px solid ${T.hair}`, paddingTop: "20px",
+              fontFamily: T.body, fontSize: "13px", lineHeight: "1.8", color: T.grey2,
             }}>
-              <div style={{
-                color: "#7a6a3a", fontSize: "10px", letterSpacing: "1.5px",
-                textTransform: "uppercase", fontWeight: "600", marginBottom: "8px"
-              }}>Legal Disclaimer</div>
+              <div style={{ ...sectionLabel, marginBottom: "8px" }}>Legal Disclaimer</div>
               <p style={{ margin: "0 0 8px 0" }}>
-                ClauseLens is an AI-assisted research tool intended to help users <em style={{ color: "#5a5468" }}>locate</em> contract language for initial review. It is <strong style={{ color: "#6a6478", fontWeight: "600" }}>not a substitute for qualified legal counsel</strong> and does not constitute legal advice.
+                ClauseLens is an AI-assisted research tool intended to help users <em>locate</em> contract language for initial review. It is <strong>not a substitute for qualified legal counsel</strong> and does not constitute legal advice.
               </p>
               <p style={{ margin: "0 0 8px 0" }}>
                 AI extraction may be incomplete, imprecise, or incorrect. Clauses marked "Not Found" may still exist in forms the model did not recognize. Always verify extracted text against the original document before acting on it.
@@ -480,31 +590,41 @@ export default function ClauseLens() {
           <>
             <div style={{ marginBottom: "24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
               <div>
-                <div style={{ fontSize: "18px", color: "#f0e8d0", marginBottom: "2px" }}>Extraction Complete</div>
-                {fileName && <div style={{ fontSize: "12px", color: "#6b6880", fontFamily: "system-ui, sans-serif" }}>{fileName}</div>}
+                <div style={{ fontFamily: T.display, fontSize: "22px", fontWeight: "800", color: T.ink }}>Extraction Complete</div>
+                {fileName && <div style={{ fontSize: "13px", color: T.grey3, fontFamily: T.body }}>{fileName}</div>}
               </div>
               <button onClick={reset} style={{
-                background: "transparent", border: "1px solid #2e2e42", color: "#8880a0",
-                borderRadius: "4px", padding: "7px 16px", fontSize: "12px",
-                fontFamily: "system-ui, sans-serif", cursor: "pointer",
-                letterSpacing: "1px", textTransform: "uppercase"
+                background: T.white, border: `1px solid ${T.hair}`, color: T.royal,
+                borderRadius: "6px", padding: "8px 16px", fontSize: "12px",
+                fontFamily: T.display, fontWeight: "700", cursor: "pointer",
+                letterSpacing: "0.05em", textTransform: "uppercase",
               }}>New Analysis</button>
             </div>
 
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "14px" }}>
+            {usedFallback && (
+              <div style={{
+                background: "rgba(199,60,47,0.1)", border: `1px solid ${T.brick}`,
+                borderRadius: "6px", padding: "10px 14px", color: "#8f2b22",
+                fontFamily: T.body, fontSize: "14px", marginBottom: "20px",
+              }}>
+                Showing a saved example result for the Cascade Ridge sample. Live AI was unavailable, so the demo keeps going.
+              </div>
+            )}
+
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "15px", border: `1px solid ${T.hair}`, borderRadius: "8px", overflow: "hidden" }}>
               <thead>
-                <tr style={{ borderBottom: "2px solid #c9a84c" }}>
+                <tr style={{ borderBottom: `2px solid ${T.royal}`, background: T.panel }}>
                   <th style={{
-                    textAlign: "left", padding: "10px 16px", color: "#c9a84c",
-                    fontFamily: "system-ui, sans-serif", fontSize: "11px",
-                    letterSpacing: "2px", textTransform: "uppercase", width: "140px", fontWeight: "600"
+                    textAlign: "left", padding: "12px 16px", color: T.royal,
+                    fontFamily: T.display, fontSize: "12px",
+                    letterSpacing: "0.08em", textTransform: "uppercase", width: "150px", fontWeight: "700",
                   }}>Clause</th>
                   <th style={{
-                    textAlign: "left", padding: "10px 16px", color: "#c9a84c",
-                    fontFamily: "system-ui, sans-serif", fontSize: "11px",
-                    letterSpacing: "2px", textTransform: "uppercase", fontWeight: "600"
+                    textAlign: "left", padding: "12px 16px", color: T.royal,
+                    fontFamily: T.display, fontSize: "12px",
+                    letterSpacing: "0.08em", textTransform: "uppercase", fontWeight: "700",
                   }}>Extracted Text</th>
-                  <th style={{ width: "90px" }}></th>
+                  <th style={{ width: "100px" }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -521,21 +641,22 @@ export default function ClauseLens() {
             </table>
 
             <div style={{
-              marginTop: "32px", borderTop: "1px solid #1e1e2e", paddingTop: "24px"
+              marginTop: "32px", borderTop: `1px solid ${T.hair}`, paddingTop: "24px",
             }}>
               <ROIPanel />
             </div>
 
             <div style={{
-              fontFamily: "system-ui, sans-serif", fontSize: "12px", color: "#3e3e52", lineHeight: "1.8"
+              marginTop: "28px", fontFamily: T.mono, fontSize: "12px", color: T.grey3, lineHeight: "1.8",
             }}>
-              <div style={{ color: "#4e4e62", marginBottom: "6px", letterSpacing: "1px", textTransform: "uppercase", fontSize: "10px" }}>
-                Build Log
-              </div>
-              v1 · Initial extraction table — PDF/DOCX upload, drag-and-drop, paste input<br />
+              <div style={{ ...sectionLabel, marginBottom: "6px", fontFamily: T.display }}>Build Log</div>
+              v1 · Initial extraction table, PDF/DOCX upload, drag and drop, paste input<br />
               v2 · Improved error surfacing, increased token limit, DOCX exception handling<br />
-              v3 · Per-clause Edit (inline Save/Cancel) + AI Explanation panel<br />
-              <span style={{ color: "#2a2a3e" }}>⚠ Known: API calls require desktop browser — mobile sandbox blocks outbound fetch to api.anthropic.com</span>
+              v3 · Per-clause Edit (inline Save/Cancel) plus AI Explanation panel<br />
+              v4 · Legal disclaimer and interactive ROI calculator<br />
+              v5 · Model call moved server side (key in server env only), Study Groups skin<br />
+              v6 · Client-side PDF text extraction, gated results table, Load Sample and scripted fallback<br />
+              <span style={{ color: T.grey2 }}>Mobile now works: the browser calls a serverless function, not the API directly.</span>
             </div>
           </>
         )}

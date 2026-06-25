@@ -1,0 +1,44 @@
+/* =============================================================================
+   ClauseLens - Study Groups skin
+   Shared design tokens with the rest of the Study Groups demo suite.
+   ============================================================================= */
+:root {
+  --royal: #122a9b;
+  --brick: #c73c2f;
+  --ink: #1a1c20;
+  --white: #ffffff;
+  --panel: #f3f5fb;
+  --hair: #dbe0ea;
+
+  /* supporting greys */
+  --grey-1: #3a3d44;
+  --grey-2: #4a4d55;
+  --grey-3: #6b6e76;
+
+  --display: "Barlow Semi Condensed", system-ui, sans-serif;
+  --body: "Spectral", Georgia, serif;
+  --mono: "Space Mono", ui-monospace, "SF Mono", monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--body);
+  color: var(--ink);
+  background: var(--white);
+  line-height: 1.55;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
