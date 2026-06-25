@@ -1,8 +1,10 @@
-# ClauseLens — AI Contract Clause Extractor
+# ClauseLens, AI Contract Clause Extractor
 
 > *A PM learning exercise that became a working tool.*
 
-ClauseLens is a single-page React app that uses the Anthropic Claude API to extract five key clauses from any contract — Term, Payment, Termination, Liability Cap, and Indemnity — in under two minutes. Built as a hands-on exploration of AI-powered product development from a product manager's perspective.
+ClauseLens is a single-page React app that uses the Anthropic Claude API to extract five key clauses from any contract (Term, Payment, Termination, Liability Cap, and Indemnity) in under two minutes. Built as a hands-on exploration of AI-powered product development from a product manager's perspective.
+
+Part of the Study Groups demo suite, and skinned to match it.
 
 ---
 
@@ -15,22 +17,13 @@ ClauseLens is a single-page React app that uses the Anthropic Claude API to extr
 ## What It Does
 
 - **Upload or paste** a contract (PDF, DOCX, or plain text)
-- **Extracts 5 key clauses** via Claude API — returns "Not Found." when a clause is genuinely absent
-- **Edit any result** inline — Save/Cancel without leaving the page
-- **Explain any result** — a second AI call explains *why* that text was chosen, in plain language
-- **ROI calculator** — adjustable hourly rate and contract volume, shows monthly and annual time value
-- **Legal disclaimer** — surfaced before extraction, not buried in a footer
-
----
-
-## Why I Built This
-
-I'm a senior transformation leader exploring how AI accelerates knowledge work. This project was deliberately chosen because contract review is a high-frequency, high-cost task in legal, finance, and operations teams — exactly the kind of workflow where a well-scoped AI tool creates measurable value.
-
-The goal wasn't to build a perfect legal tool. It was to:
-- Understand the full stack from prompt engineering through UI
-- Experience the debugging loop firsthand (see Build Log below)
-- Develop an intuition for where AI adds value vs. where human review is non-negotiable
+- **Extracts 5 key clauses** via Claude, and returns "Not Found." when a clause is genuinely absent
+- **Never shows a false table.** Failed or empty input shows an error, not a page of "Not Found"
+- **Edit any result** inline, with Save/Cancel, without leaving the page
+- **Explain any result.** A second AI call explains why that text was chosen, in plain language
+- **Load Sample** loads the Cascade Ridge subcontract, and a scripted fallback keeps the demo alive if the API is unavailable
+- **ROI calculator** with adjustable hourly rate and contract volume
+- **Legal disclaimer and privacy line** surfaced before extraction, not buried in a footer
 
 ---
 
@@ -38,23 +31,27 @@ The goal wasn't to build a perfect legal tool. It was to:
 
 ```
 User Input (paste / PDF / DOCX)
-        ↓
-  File Processing
-  ├── PDF → base64 → Anthropic document API
-  └── DOCX → Mammoth.js → plain text → Anthropic messages API
-        ↓
-  Claude API (claude-haiku)
-  ├── Extraction call → JSON with 5 clause keys
-  └── Explanation call → plain-language rationale per clause
-        ↓
-  React state → editable results table → ROI panel
+        |
+  Text extraction (all client side)
+  |-- PDF  -> pdf.js text layer -> plain text
+  |-- DOCX -> Mammoth.js        -> plain text
+  |-- paste                     -> plain text
+        |
+  POST /api/analyze  (Netlify Function, server side)
+  |-- holds ANTHROPIC_API_KEY, calls Claude
+  |-- validates payload, caps size, rate limits, sanitizes errors
+  |-- extract call     -> JSON with 5 clause keys
+  |-- explain call     -> plain-language rationale per clause
+        |
+  React state -> gated results table -> ROI panel
 ```
 
 **Key decisions:**
-- PDFs sent as base64 documents (Claude reads natively — no text extraction needed)
-- DOCX converted via Mammoth.js (Claude API doesn't natively parse Word format)
-- Extraction prompt returns strict JSON — `regex` match used as fallback if model wraps in markdown fences
-- Explanation is a separate prompt with a different system role — avoids contaminating extraction output
+- **The model call runs server side.** The browser calls our own Netlify Function, which holds the key in server env (`ANTHROPIC_API_KEY`). The key never reaches the client, the bundle, or any response. This also fixes the old mobile limitation, since the browser no longer calls api.anthropic.com directly.
+- **PDF and DOCX text is extracted in the browser** (pdf.js and Mammoth.js), then sent as plain text, exactly like the paste path. Image-only or scanned PDFs have no text layer, so the app detects that and asks for OCR or a paste instead of sending empty text.
+- **The results table is gated.** It renders only when non-empty text was sent and a valid structured response came back. The parse and gate logic lives in one shared module (`src/lib/extraction.js`) used by both the function and the client, and is unit-tested.
+- **No contract text is stored or logged**, anywhere. Processed in memory, returned, discarded.
+- **The model id comes from `ANTHROPIC_MODEL`** in the environment, with no hardcoded default.
 
 ---
 
@@ -64,10 +61,12 @@ User Input (paste / PDF / DOCX)
 |---------|-------------|-----|
 | v1 | Initial extraction table, PDF/DOCX upload, drag-and-drop | Core functionality first |
 | v2 | Error surfacing, increased token limit, DOCX exception handling | Silent failures were masking real API errors |
-| v3 | Per-clause Edit (inline Save/Cancel) + AI Explanation panel | Users need to correct and understand outputs, not just consume them |
-| v4 | Legal disclaimer (input page) + interactive ROI calculator (results page) | Trust and business case are product requirements, not afterthoughts |
+| v3 | Per-clause Edit (inline Save/Cancel) plus AI Explanation panel | Users need to correct and understand outputs, not just consume them |
+| v4 | Legal disclaimer (input page) plus interactive ROI calculator | Trust and business case are product requirements, not afterthoughts |
+| v5 | Model call moved into a Netlify Function (key server side only), Study Groups skin | Security and brand alignment for the owner demo |
+| v6 | Client-side PDF text extraction, gated results table, Load Sample and scripted fallback | Fix the broken upload path, kill the false "Not Found" table, make the live demo reliable |
 
-**Known issue resolved:** Early versions showed "Analysis failed: Invalid response format" on mobile. Root cause: the Claude.ai mobile artifact sandbox blocks outbound fetch to `api.anthropic.com`. Works correctly on desktop browsers.
+**Resolved:** earlier builds showed "Analysis failed" on mobile because the Claude mobile sandbox blocked the browser's outbound fetch to api.anthropic.com. Moving the call into a serverless function removes that block.
 
 ---
 
@@ -75,46 +74,52 @@ User Input (paste / PDF / DOCX)
 
 ```bash
 # Clone
-git clone https://github.com/Spr0/clauselens.git
-cd clauselens
+git clone https://github.com/Spr0/ClauseLens.git
+cd ClauseLens
 
 # Install
-npm create vite@latest . -- --template react
-npm install mammoth
+npm install
 
-# Replace src/App.jsx with ClauseLens.jsx
-# Run
-npm run dev
+# Configure server env (never use a VITE_ prefix for the key)
+cp env.example .env
+# edit .env: set ANTHROPIC_API_KEY and ANTHROPIC_MODEL
+
+# Run locally (Netlify dev serves the function + the Vite app)
+netlify dev
+
+# Run the tests
+npm test
 ```
 
-> The Anthropic API key is injected automatically when running inside the Claude.ai artifact environment. For standalone deployment, add your key to a `.env` file and pass it via the `x-api-key` header.
+For production on Netlify, set `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`, and optionally `ALLOWED_ORIGIN` in the site's environment variables. Never commit a key.
 
 ---
 
 ## Product Decisions Worth Noting
 
-**Disclaimer placement:** On the input page, not the results page. A disclaimer that appears after someone has already acted on AI output is a liability, not a safeguard.
+**"Not Found" is a feature.** The tool surfaces absent clauses rather than hallucinating text. A false negative is recoverable. A false positive in a contract is not. The corollary: when extraction does not run, the app shows an error, never a confident table of "Not Found."
 
-**ROI framing:** The calculator assumes 25 min manual review vs. ~1.5 min with AI assistance. These are conservative benchmarks from legal ops literature. The point is not precision — it's to give a procurement conversation a number to anchor on.
+**Disclaimer placement:** on the input page, not the results page. A disclaimer that appears after someone has already acted on AI output is a liability, not a safeguard.
 
-**"Not Found" is a feature:** The tool explicitly surfaces absent clauses rather than hallucinating text. A false negative is recoverable. A false positive in a contract context is not.
+**Privacy, said plainly:** contract text is sent to the AI provider for analysis and is not stored by ClauseLens. The demo uses a fictional contract on purpose, you should not paste a real, sensitive contract into a public tool. In an owner's own deployment, this would run inside their own tenant so the data stays in their building.
 
-**Edit before export (v3):** Users must be able to correct AI output in-context. Building a correction workflow signals that the tool is designed for responsible use, not blind trust.
+**Edit before export.** Users must be able to correct AI output in context. Building a correction workflow signals that the tool is designed for responsible use, not blind trust.
 
 ---
 
 ## Stack
 
 - **React** (via Vite)
-- **Mammoth.js** — DOCX text extraction
-- **Anthropic Claude API** — `claude-haiku-4-5` for extraction and explanation
-- No backend — all processing client-side or via direct API call
+- **pdf.js** for PDF text extraction, **Mammoth.js** for DOCX
+- **Netlify Functions** for the server-side Anthropic call
+- **Anthropic Claude API** for extraction and explanation
+- **Vitest** for the clause-parsing and gating tests
 
 ---
 
 ## About
 
-Built by **Scott Henderson** — enterprise transformation leader, VP Technology, renewable energy and beyond.
+Built by **Scott Henderson**, enterprise transformation leader, VP Technology, renewable energy and beyond.
 
 Exploring the developer ecosystem from a product perspective to build better intuition for AI-native tooling.
 

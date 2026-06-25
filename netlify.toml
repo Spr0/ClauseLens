@@ -1,3 +1,22 @@
+# Netlify config for ClauseLens (Vite SPA + serverless function).
+# Set the project's required env vars in Netlify: ANTHROPIC_API_KEY,
+# ANTHROPIC_MODEL, and optionally ALLOWED_ORIGIN.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+  functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+[functions]
+  directory = "netlify/functions"
+  # Bundle the shared clause-parsing module the function imports from src/lib.
+  included_files = ["src/lib/extraction.js"]
+
+# The analyze function declares its own route (/api/analyze) via config.path,
+# so Netlify handles it before this SPA catch-all redirect.
 [[redirects]]
   from = "/*"
   to = "/index.html"
