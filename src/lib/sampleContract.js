@@ -37,11 +37,52 @@ IN WITNESS WHEREOF, the parties have executed this Agreement as of the Effective
 
 // The canonical, vetted extraction for the sample. Four clauses present, no
 // Liability Cap. This is the cached result the demo falls back to when the API
-// is unavailable, so it must never drift (the regression test guards it).
+// is unavailable, so it must never drift (the regression test guards it). The
+// missing Liability Cap is surfaced as the headline item in the raise list.
 export const CASCADE_RIDGE_RESULT = {
-  Term: "This Agreement shall commence on the Effective Date and shall remain in effect until Subcontractor's work is finally completed and accepted, but in no event later than eighteen (18) months from the Effective Date.",
-  Payment: "Contractor shall pay Subcontractor for work satisfactorily completed within thirty (30) days following Contractor's receipt of Subcontractor's approved monthly application for payment, with five percent (5%) retainage.",
-  Termination: "Contractor may terminate for its convenience upon seven (7) days written notice, or for cause immediately if Subcontractor fails to cure a material default within three (3) days of written notice.",
-  "Liability Cap": "Not Found.",
-  Indemnity: "To the fullest extent permitted by law, Subcontractor shall indemnify, defend, and hold harmless Contractor and the Owner, but only to the extent caused by the negligent acts or omissions of the Subcontractor.",
+  clauses: [
+    {
+      name: "Term",
+      quote:
+        "This Agreement shall commence on the Effective Date and shall remain in effect until Subcontractor's work is finally completed and accepted, but in no event later than eighteen (18) months from the Effective Date.",
+      plain:
+        "The contract runs until the work is finished and accepted, and no later than 18 months from the start date.",
+      status: "Found",
+    },
+    {
+      name: "Payment",
+      quote:
+        "Contractor shall pay Subcontractor for work satisfactorily completed within thirty (30) days following Contractor's receipt of Subcontractor's approved monthly application for payment. Contractor shall retain five percent (5%) of each progress payment as retainage.",
+      plain:
+        "Payment is due within 30 days of an approved monthly invoice, with 5 percent held back as retainage until final acceptance.",
+      status: "Found",
+    },
+    {
+      name: "Termination",
+      quote:
+        "Contractor may terminate this Agreement, in whole or in part, for its convenience upon seven (7) days written notice to Subcontractor. Contractor may terminate for cause immediately if Subcontractor fails to cure a material default within three (3) days of written notice.",
+      plain:
+        "The Contractor can end the contract for convenience on 7 days notice, or immediately for cause if a default is not cured within 3 days.",
+      status: "Found",
+    },
+    {
+      name: "Liability Cap",
+      quote: "Not Found.",
+      plain: "",
+      status: "Not Found",
+    },
+    {
+      name: "Indemnity",
+      quote:
+        "To the fullest extent permitted by law, Subcontractor shall indemnify, defend, and hold harmless Contractor and the Owner from and against any claims, damages, losses, and expenses, including reasonable attorneys' fees, arising out of or resulting from the performance of the Subcontractor's work, but only to the extent caused by the negligent acts or omissions of the Subcontractor.",
+      plain:
+        "The Subcontractor covers the Contractor and Owner for claims caused by the Subcontractor's own negligence, but only to that extent.",
+      status: "Found",
+    },
+  ],
+  raise: [
+    "No Liability Cap. The contract sets no ceiling on the Subcontractor's total liability, so exposure is open-ended. Raise this before signing.",
+    "Indemnity runs one direction only. The Subcontractor indemnifies the Contractor and Owner, with no reciprocal protection for the Subcontractor.",
+    "Termination for convenience favors the Contractor. Seven days notice with payment only for work performed leaves the Subcontractor little recourse.",
+  ],
 };

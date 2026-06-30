@@ -1,0 +1,193 @@
+/* SHARED MODULE A styles. Byte-identical across the three apps. Tokens are
+   scoped to the component root so dropping this file into another app cannot
+   collide with that app's global styles. */
+
+.kit-roi {
+  --kit-royal: #122a9b;
+  --kit-brick: #c73c2f;
+  --kit-ink: #1a1c20;
+  --kit-white: #ffffff;
+  --kit-panel: #f3f5fb;
+  --kit-hair: #dbe0ea;
+  --kit-grey2: #4a4d55;
+  --kit-grey3: #6b6e76;
+  --kit-display: "Barlow Semi Condensed", system-ui, sans-serif;
+  --kit-body: "Spectral", Georgia, serif;
+  --kit-mono: "Space Mono", ui-monospace, "SF Mono", monospace;
+
+  font-family: var(--kit-body);
+  color: var(--kit-ink);
+}
+
+.kit-roi-title {
+  font-family: var(--kit-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kit-ink);
+  margin: 0 0 8px;
+  padding-bottom: 4px;
+  border-bottom: 2px solid var(--kit-hair);
+}
+
+.kit-roi-headline {
+  font-family: var(--kit-body);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--kit-grey2);
+  margin: 0 0 20px;
+}
+
+.kit-roi-block {
+  background: var(--kit-panel);
+  border: 1px solid var(--kit-hair);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.kit-roi-block-label {
+  font-family: var(--kit-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--kit-brick);
+  margin-bottom: 14px;
+}
+
+.kit-roi-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+}
+
+.kit-roi-op {
+  font-family: var(--kit-display);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--kit-grey3);
+  padding-bottom: 6px;
+}
+
+.kit-roi-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: var(--kit-body);
+  font-size: 13px;
+  color: var(--kit-grey2);
+}
+
+.kit-roi-field select,
+.kit-roi-field input {
+  background: var(--kit-white);
+  border: 1px solid var(--kit-hair);
+  border-radius: 6px;
+  color: var(--kit-ink);
+  font-family: var(--kit-body);
+  font-size: 14px;
+  padding: 7px 10px;
+  outline: none;
+  min-width: 90px;
+}
+
+.kit-roi-field select:focus,
+.kit-roi-field input:focus {
+  border-color: var(--kit-royal);
+}
+
+.kit-roi-note {
+  color: var(--kit-grey3);
+  font-size: 12px;
+  font-style: italic;
+}
+
+.kit-roi-score {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.kit-roi-score-num {
+  font-family: var(--kit-display);
+  font-size: 30px;
+  font-weight: 800;
+  color: var(--kit-royal);
+  line-height: 1;
+}
+
+.kit-roi-score-rank {
+  font-family: var(--kit-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--kit-brick);
+}
+
+.kit-roi-inputs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.kit-roi-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.kit-roi-stat {
+  flex: 1;
+  min-width: 130px;
+  background: var(--kit-white);
+  border: 1px solid var(--kit-hair);
+  border-radius: 8px;
+  padding: 14px 18px;
+}
+
+.kit-roi-stat-hero {
+  border-color: var(--kit-royal);
+  background: rgba(18, 42, 155, 0.06);
+}
+
+.kit-roi-stat-label {
+  font-family: var(--kit-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--kit-brick);
+  margin-bottom: 6px;
+}
+
+.kit-roi-stat-value {
+  font-family: var(--kit-display);
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--kit-royal);
+}
+
+.kit-roi-reset {
+  margin-top: 16px;
+  background: var(--kit-white);
+  border: 1px solid var(--kit-hair);
+  border-radius: 6px;
+  color: var(--kit-royal);
+  font-family: var(--kit-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 8px 16px;
+  cursor: pointer;
+}
+
+.kit-roi-reset:hover {
+  background: var(--kit-panel);
+}
