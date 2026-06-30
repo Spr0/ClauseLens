@@ -17,7 +17,7 @@ export const ROI_HEADLINE =
 
 // Per-app config. This is the only thing that differs between the three apps.
 export const ROI_CONFIGS = {
-  ClauseLens: {
+  clauselens: {
     label: "ClauseLens",
     value: 5,
     freq: 3,
@@ -26,7 +26,7 @@ export const ROI_CONFIGS = {
     minutesWith: 10,
     riskNote: "A missed cap can be catastrophic.",
   },
-  RFI: {
+  rfi: {
     label: "RFI drafter",
     value: 2,
     freq: 4,
@@ -35,7 +35,7 @@ export const ROI_CONFIGS = {
     minutesWith: 8,
     riskNote: "Lower stakes per run.",
   },
-  Submittal: {
+  submittal: {
     label: "Submittal checker",
     value: 3,
     freq: 4,
@@ -87,7 +87,7 @@ function fmtDollars(n) {
 }
 
 export function ROICalculator({ appKey }) {
-  const config = ROI_CONFIGS[appKey] || ROI_CONFIGS.ClauseLens;
+  const config = ROI_CONFIGS[appKey] || ROI_CONFIGS.clauselens;
 
   const [value, setValue] = useState(config.value);
   const [freq, setFreq] = useState(config.freq);

@@ -26,6 +26,16 @@ into a tool a team owns, where a named person signs every output.
 clear error (no silent failure) · ROI math correct ($12k base, $132k with risk term) · sign-off gate
 enables only after name + role + attestation and appends the signature line.
 
+## Conformed to `@sg/core` canonical sign-off (2026-06-30)
+
+The Study Groups platform (`Spr0/Study-Groups`) now holds the canonical ROI + sign-off in `@sg/core`.
+ClauseLens conforms by behaviour and copy (it keeps its own React modules for now):
+- Sign-off line softened to the canonical block, internal approval rather than a signature:
+  `Reviewed and approved by {name}, {role}, on {date}. Drafted with AI assistance; approved by the named reviewer before issue.`
+  (no more "verified by a person").
+- `appKey` values lowercased to `clauselens` / `rfi` / `submittal` to match the canonical config keys.
+- A later pass can replace the local `src/shared/*.jsx` with a `@sg/core` import.
+
 ## Deliberate deviations from the spec (intentional, do not re-flag)
 
 1. **PDF extraction stays client-side** (pdf.js), not a `/api/extract` function. Verified working.

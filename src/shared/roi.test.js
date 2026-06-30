@@ -11,7 +11,7 @@ describe("roundToHundred", () => {
 
 describe("computeROI (spec section 3 formula)", () => {
   it("computes time, hours, and dollars for the ClauseLens defaults", () => {
-    const { minutesWithout, minutesWith } = ROI_CONFIGS.ClauseLens; // 30, 10
+    const { minutesWithout, minutesWith } = ROI_CONFIGS.clauselens; // 30, 10
     const r = computeROI({
       minutesWithout,
       minutesWith,

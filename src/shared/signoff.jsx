@@ -17,15 +17,15 @@ import { useState } from "react";
 import "./signoff.css";
 
 export const SIGNOFF_CONFIGS = {
-  ClauseLens: {
+  clauselens: {
     attestation:
       "I verified the quotes against the contract and confirmed each Not Found by searching the document myself.",
   },
-  RFI: {
+  rfi: {
     attestation:
       "I checked the cited references and confirmed the question and suggested resolution.",
   },
-  Submittal: {
+  submittal: {
     attestation:
       "I confirmed each deviation against the spec section and that no compliance is claimed the spec does not support.",
   },
@@ -40,7 +40,7 @@ function todayLong() {
 }
 
 export function signatureLine(name, role) {
-  return `Reviewed and approved by ${name}, ${role}, on ${todayLong()}. Drafted with AI assistance; verified by a person.`;
+  return `Reviewed and approved by ${name}, ${role}, on ${todayLong()}. Drafted with AI assistance; approved by the named reviewer before issue.`;
 }
 
 function downloadText(filename, text) {
@@ -81,7 +81,7 @@ function printText(text) {
 }
 
 export function SignOff({ appKey, buildExportText, filename = "clauselens-review.txt" }) {
-  const config = SIGNOFF_CONFIGS[appKey] || SIGNOFF_CONFIGS.ClauseLens;
+  const config = SIGNOFF_CONFIGS[appKey] || SIGNOFF_CONFIGS.clauselens;
 
   const [name, setName] = useState("");
   const [role, setRole] = useState("");

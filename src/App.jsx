@@ -563,12 +563,12 @@ export default function ClauseLens() {
 
             {/* ROI panel (shared module) */}
             <div style={{ marginTop: "32px", borderTop: `1px solid ${T.hair}`, paddingTop: "24px" }}>
-              <ROICalculator appKey="ClauseLens" />
+              <ROICalculator appKey="clauselens" />
             </div>
 
             {/* Sign-off block (shared module). Gates Export/Copy/Print. */}
             <div style={{ marginTop: "28px" }}>
-              <SignOff appKey="ClauseLens" buildExportText={() => buildExportText(results, fileName)} />
+              <SignOff appKey="clauselens" buildExportText={() => buildExportText(results, fileName)} />
             </div>
 
             <div style={{
