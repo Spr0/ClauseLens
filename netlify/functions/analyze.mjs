@@ -1,9 +1,10 @@
 // =============================================================================
 // ClauseLens - analyze function
 // =============================================================================
-// Holds the Anthropic key (server side only) and runs the two model calls the
-// app needs: clause extraction and per-clause explanation. The browser never
-// talks to api.anthropic.com directly and never sees the key.
+// Holds the Anthropic key (server side only) and runs the clause review: it
+// reads the contract text and returns a structured, clause-by-clause result
+// plus a "raise before signing" list. The browser never talks to
+// api.anthropic.com directly and never sees the key.
 //
 // Security posture (see ClauseLens_Fix_Spec):
 //   - POST only, same-origin (plus an optional ALLOWED_ORIGIN allowlist).
@@ -20,22 +21,26 @@
 import { parseClauseResponse, isValidResult } from "../../src/lib/extraction.js";
 
 const MAX_CHARS = 100000; // ~25k tokens of contract text, a sane ceiling
-const EXTRACT_MAX_TOKENS = 2000;
-const EXPLAIN_MAX_TOKENS = 1024;
+const REVIEW_MAX_TOKENS = 3000; // richer payload: quote + plain + status + raise
 const RATE_LIMIT = 15; // requests per IP per window
 const RATE_WINDOW_MS = 60 * 1000;
 
-const SYSTEM_PROMPT = `You are a legal contract analyst. Extract specific clauses from contract text.
-Return ONLY a valid JSON object with exactly these keys: "Term", "Payment", "Termination", "Liability Cap", "Indemnity".
-For each key, provide the relevant extracted text from the contract. If a clause is not found, use the string "Not Found."
-Be concise, extract the most relevant sentence(s) for each clause. Do not include preamble or explanation, only the JSON object.`;
+// The tool's standing instruction (spec section 6). It must return ONLY JSON in
+// the shape extraction.js parses.
+const SYSTEM_PROMPT = `You are a contract clause reviewer for the reviewing organization. When given a contract, pull these clauses one at a time: Term, Payment, Termination, Liability Cap, Indemnity. For each one: quote the exact language from the contract, restate it in one plain sentence, and if it is not present say Not Found. Do not write a clause that is not there. Then list anything missing or one-sided to raise before signing. Do not give legal advice and do not decide whether to sign. This is a first read for a person to verify.
 
-const EXPLAIN_PROMPT = `You are a legal contract analyst. A user extracted a clause from a contract and wants to understand how you identified it.
-Given the clause name, the extracted text, and the original contract, explain in 2-3 plain-language sentences:
-1. Where in the contract you found this clause
-2. Why this text was chosen as the most relevant excerpt
-3. Any caveats or nuances the user should be aware of
-Be concise and plain-language. Do not use legal jargon without explaining it.`;
+Return ONLY a valid JSON object, with no preamble, no markdown fences, and no explanation. Use exactly this shape:
+{
+  "clauses": [
+    { "name": "Term", "quote": "<exact contract language, or Not Found.>", "plain": "<one plain sentence, or empty string if Not Found>", "status": "Found" or "Not Found" },
+    { "name": "Payment", "quote": "...", "plain": "...", "status": "..." },
+    { "name": "Termination", "quote": "...", "plain": "...", "status": "..." },
+    { "name": "Liability Cap", "quote": "...", "plain": "...", "status": "..." },
+    { "name": "Indemnity", "quote": "...", "plain": "...", "status": "..." }
+  ],
+  "raise": [ "<short item to raise before signing>", "<another>" ]
+}
+Include all five clauses, in that order. If a clause is absent, set quote to "Not Found.", plain to "", and status to "Not Found". A missing Liability Cap is a material gap and should be the first item in raise.`;
 
 // Light, best-effort in-memory rate limit. Per function instance, which is
 // plenty for a single-room demo. Not a hard security control.
@@ -151,11 +156,6 @@ export default async (req, context) => {
     return json({ error: "Invalid request body." }, 400, origin || undefined);
   }
 
-  const mode = payload?.mode;
-  if (mode !== "extract" && mode !== "explain") {
-    return json({ error: "Invalid request." }, 400, origin || undefined);
-  }
-
   const apiKey = env("ANTHROPIC_API_KEY");
   const model = env("ANTHROPIC_MODEL");
   if (!apiKey || !model) {
@@ -166,62 +166,42 @@ export default async (req, context) => {
     return json({ error: "Service is not configured. Try again later." }, 503, origin || undefined);
   }
 
-  try {
-    if (mode === "extract") {
-      const contractText = payload?.contractText;
-      if (typeof contractText !== "string" || contractText.trim().length === 0) {
-        return json(
-          { error: "No contract text received. Paste the text or upload a readable file." },
-          400,
-          origin || undefined
-        );
-      }
-      if (contractText.length > MAX_CHARS) {
-        return json(
-          { error: `Contract is too long. Limit ${MAX_CHARS.toLocaleString()} characters.` },
-          413,
-          origin || undefined
-        );
-      }
-      const raw = await callModel({
-        apiKey,
-        model,
-        system: SYSTEM_PROMPT,
-        userText: `Extract the 5 key clauses from this contract:\n\n${contractText}`,
-        maxTokens: EXTRACT_MAX_TOKENS,
-      });
-      const result = parseClauseResponse(raw);
-      if (!isValidResult(result)) {
-        console.error("[analyze] extract: could not parse a valid result from the model");
-        return json({ error: "Could not read a result from the analysis. Try again." }, 502, origin || undefined);
-      }
-      return json({ result }, 200, origin || undefined);
-    }
+  const contractText = payload?.contractText;
+  if (typeof contractText !== "string" || contractText.trim().length === 0) {
+    return json(
+      { error: "No contract text received. Paste the text or upload a readable file." },
+      400,
+      origin || undefined
+    );
+  }
+  if (contractText.length > MAX_CHARS) {
+    return json(
+      { error: `Contract is too long. Limit ${MAX_CHARS.toLocaleString()} characters.` },
+      413,
+      origin || undefined
+    );
+  }
 
-    // mode === "explain"
-    const { clause, extracted, contractExcerpt } = payload || {};
-    if (
-      typeof clause !== "string" ||
-      typeof extracted !== "string" ||
-      typeof contractExcerpt !== "string"
-    ) {
-      return json({ error: "Invalid request." }, 400, origin || undefined);
-    }
-    if (contractExcerpt.length > MAX_CHARS) {
-      return json({ error: "Contract is too long to explain." }, 413, origin || undefined);
-    }
-    const explanation = await callModel({
+  try {
+    const raw = await callModel({
       apiKey,
       model,
-      system: EXPLAIN_PROMPT,
-      userText: `Clause: ${clause}\nExtracted text: ${extracted}\n\nContract excerpt:\n${contractExcerpt}`,
-      maxTokens: EXPLAIN_MAX_TOKENS,
+      system: SYSTEM_PROMPT,
+      userText: `Review the five key clauses in this contract:\n\n${contractText}`,
+      maxTokens: REVIEW_MAX_TOKENS,
     });
-    return json({ explanation }, 200, origin || undefined);
+    const result = parseClauseResponse(raw);
+    // Gate on a valid, structured result. Anything else is an error, never a
+    // false "Not Found" report.
+    if (!isValidResult(result)) {
+      console.error("[analyze] could not parse a valid result from the model");
+      return json({ error: "Could not read a result from the analysis. Try again." }, 502, origin || undefined);
+    }
+    return json({ result }, 200, origin || undefined);
   } catch (err) {
     // Log a sanitized line server side. Never log the contract body, never
     // return raw model errors or stack traces to the client.
-    console.error(`[analyze] ${mode} failed: ${err?.message || "unknown error"}`);
+    console.error(`[analyze] failed: ${err?.message || "unknown error"}`);
     return json({ error: "Analysis failed. Please try again." }, 502, origin || undefined);
   }
 };

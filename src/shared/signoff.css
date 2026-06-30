@@ -1,0 +1,143 @@
+/* SHARED MODULE B styles. Byte-identical across the three apps. Tokens scoped
+   to the component root to avoid colliding with the host app. */
+
+.kit-signoff {
+  --kit-royal: #122a9b;
+  --kit-brick: #c73c2f;
+  --kit-ink: #1a1c20;
+  --kit-white: #ffffff;
+  --kit-panel: #f3f5fb;
+  --kit-hair: #dbe0ea;
+  --kit-grey2: #4a4d55;
+  --kit-grey3: #6b6e76;
+  --kit-display: "Barlow Semi Condensed", system-ui, sans-serif;
+  --kit-body: "Spectral", Georgia, serif;
+
+  font-family: var(--kit-body);
+  color: var(--kit-ink);
+  background: var(--kit-panel);
+  border: 1px solid var(--kit-hair);
+  border-left: 3px solid var(--kit-royal);
+  border-radius: 8px;
+  padding: 20px 22px;
+}
+
+.kit-signoff-title {
+  font-family: var(--kit-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kit-ink);
+  margin: 0 0 6px;
+}
+
+.kit-signoff-lede {
+  font-family: var(--kit-body);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--kit-grey2);
+  margin: 0 0 16px;
+}
+
+.kit-signoff-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.kit-signoff-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: var(--kit-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--kit-brick);
+  flex: 1;
+  min-width: 180px;
+}
+
+.kit-signoff-field input {
+  background: var(--kit-white);
+  border: 1px solid var(--kit-hair);
+  border-radius: 6px;
+  color: var(--kit-ink);
+  font-family: var(--kit-body);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: normal;
+  text-transform: none;
+  padding: 9px 12px;
+  outline: none;
+}
+
+.kit-signoff-field input:focus {
+  border-color: var(--kit-royal);
+}
+
+.kit-signoff-attest {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-family: var(--kit-body);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--kit-ink);
+  background: var(--kit-white);
+  border: 1px solid var(--kit-hair);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  cursor: pointer;
+}
+
+.kit-signoff-attest input {
+  margin-top: 3px;
+  accent-color: var(--kit-royal);
+  flex-shrink: 0;
+}
+
+.kit-signoff-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.kit-signoff-btn {
+  background: var(--kit-white);
+  border: 1px solid var(--kit-royal);
+  border-radius: 6px;
+  color: var(--kit-royal);
+  font-family: var(--kit-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 10px 20px;
+  cursor: pointer;
+}
+
+.kit-signoff-btn-primary {
+  background: var(--kit-royal);
+  color: var(--kit-white);
+  border-color: var(--kit-royal);
+}
+
+.kit-signoff-btn:disabled {
+  background: var(--kit-hair);
+  color: var(--kit-grey3);
+  border-color: var(--kit-hair);
+  cursor: not-allowed;
+}
+
+.kit-signoff-hint {
+  font-family: var(--kit-body);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--kit-grey3);
+}
